@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RefereeLog - Precision on the Pitch</title>
+    <style>
+        /* --- 1. 全局变量 --- */
+        :root {
+            --bg-color: #050505;
+            --surface-color: #121212;
+            --primary-green: #00E676;
+            --primary-green-dim: rgba(0, 230, 118, 0.1);
+            --text-main: #FFFFFF;
+            --text-sub: #888888;
+            --font-stack: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: var(--font-stack);
+            line-height: 1.6;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+        
+        a { text-decoration: none; }
+
+        /* 语言切换 */
+        [lang="en"] { display: none; }
+        body.en-mode [lang="zh"] { display: none !important; }
+        body.en-mode [lang="en"] { display: block !important; }
+        body.en-mode span[lang="en"] { display: inline !important; }
+
+        .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 2; }
+
+        /* 背景光效 */
+        .ambient-light {
+            position: fixed; top: -20%; left: 50%; transform: translateX(-50%);
+            width: 800px; height: 600px;
+            background: radial-gradient(circle, rgba(0, 230, 118, 0.08) 0%, rgba(0,0,0,0) 70%);
+            z-index: 0; pointer-events: none;
+        }
+
+        /* --- 导航栏 --- */
+        nav { padding: 30px 0; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-size: 24px; font-weight: 800; display: flex; align-items: center; color: #fff; letter-spacing: -0.5px; }
+        .logo svg { width: 26px; height: 26px; fill: var(--primary-green); margin-right: 10px; }
+        .logo-grey { color: #555; } .logo-green { color: var(--primary-green); margin-left: 6px; }
+        
+        .nav-right { display: flex; align-items: center; gap: 20px; }
+        .lang-switch {
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1); color: #fff;
+            padding: 6px 14px; border-radius: 20px; font-size: 13px; cursor: pointer; font-weight: 600;
+        }
+
+        /* --- Hero 首屏 --- */
+        .hero { text-align: center; padding: 100px 0 60px; }
+        .hero h1 { font-size: 64px; font-weight: 800; line-height: 1.1; margin-bottom: 24px; letter-spacing: -2px; }
+        .hero h1 span { background: linear-gradient(to right, #fff, #777); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .hero p { font-size: 20px; color: var(--text-sub); margin-bottom: 40px; }
+
+        .btn-group { display: flex; justify-content: center; gap: 16px; margin-bottom: 80px; }
+        .btn {
+            padding: 16px 32px; border-radius: 100px; font-weight: 600; display: flex; align-items: center; gap: 8px; transition: transform 0.2s;
+        }
+        .btn:hover { transform: translateY(-2px); }
+        .btn-primary { background: var(--primary-green); color: #000; box-shadow: 0 0 25px rgba(0,230,118,0.3); }
+        .btn-secondary { background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.1); }
+
+        /* --- 🔥 核心交互区 (Interactive Demo) --- */
+        .interactive-section {
+            display: flex;
+            align-items: center; /* 垂直居中 */
+            justify-content: center;
+            gap: 80px; /* 手机和卡片的间距 */
+            padding: 40px 0 100px;
+        }
+
+        /* 左侧：手机展示位 */
+        .phone-wrapper {
+            position: relative;
+            width: 320px; /* 手机宽度 */
+            flex-shrink: 0;
+        }
+
+        .phone-frame {
+            width: 100%;
+            height: 650px; /* 手机高度 */
+            background: #000;
+            border-radius: 48px;
+            border: 10px solid #222;
+            box-shadow: 0 40px 80px -20px rgba(0,0,0,0.8);
+            overflow: hidden;
+            position: relative;
+            z-index: 2;
+        }
+
+        /* 屏幕图片容器 */
+        .screen-container { width: 100%; height: 100%; position: relative; }
+        
+        .screen-img {
+            width: 100%; height: 100%; object-fit: cover;
+            position: absolute; top: 0; left: 0;
+            opacity: 0; /* 默认隐藏 */
+            transition: opacity 0.4s ease-in-out, transform 0.4s ease; /* 淡入淡出动画 */
+            transform: scale(1.05); /* 默认稍微放大一点 */
+        }
+        
+        /* 激活状态的图片显示 */
+        .screen-img.active { opacity: 1; transform: scale(1); }
+
+        /* 手机背后的光晕 */
+        .phone-glow {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 300px; height: 500px;
+            background: var(--primary-green);
+            filter: blur(120px); opacity: 0.15; z-index: 1;
+            transition: opacity 0.3s;
+        }
+
+        /* 右侧：功能选择区 */
+        .feature-selector {
+            max-width: 450px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .section-label {
+            color: var(--primary-green);
+            font-weight: 600; font-size: 14px; letter-spacing: 1px;
+            margin-bottom: 10px; text-transform: uppercase;
+        }
+
+        .feature-card {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.08);
+            padding: 24px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* 卡片悬停 */
+        .feature-card:hover {
+            background: rgba(255,255,255,0.03);
+            border-color: rgba(255,255,255,0.2);
+        }
+
+        /* 🔥 卡片激活状态 (核心) */
+        .feature-card.active {
+            background: var(--surface-color);
+            border-color: var(--primary-green); /* 绿边框 */
+            box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5);
+        }
+        
+        /* 激活时，加一个左边的绿色指示条 */
+        .feature-card.active::before {
+            content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+            width: 4px; background: var(--primary-green);
+        }
+
+        .card-header { display: flex; align-items: center; gap: 15px; margin-bottom: 8px; }
+        
+        .f-icon {
+            width: 32px; height: 32px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(255,255,255,0.1); transition: 0.3s;
+        }
+        .f-icon svg { width: 18px; height: 18px; stroke: #fff; }
+
+        /* 激活状态下图标变绿 */
+        .feature-card.active .f-icon { background: var(--primary-green); }
+        .feature-card.active .f-icon svg { stroke: #000; }
+
+        .feature-card h3 { font-size: 18px; color: #fff; font-weight: 600; }
+        .feature-card p { font-size: 14px; color: var(--text-sub); line-height: 1.5; margin-left: 47px; }
+
+        /* --- 页脚 --- */
+        footer { text-align: center; padding: 60px 0; border-top: 1px solid rgba(255,255,255,0.05); color: #666; font-size: 14px; }
+
+        /* --- 移动端适配 --- */
+        @media (max-width: 900px) {
+            .hero h1 { font-size: 42px; }
+            .interactive-section { flex-direction: column; gap: 40px; }
+            .phone-wrapper { width: 260px; } 
+            .phone-frame { height: 520px; }
+            .feature-selector { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="ambient-light"></div>
+
+    <div class="container">
+        <!-- 导航 -->
+        <nav>
+            <div class="logo">
+    <div style="
+        width: 36px; 
+        height: 36px; 
+        background-color: #FFFFFF;
+        border-radius: 10px;
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        margin-right: 12px;
+        box-shadow: 0 0 15px rgba(255, 255, 255, 0.2); 
+    ">
+        <img src="assets/icon.svg" style="width: 40px; height: 40px; display: block;">
+    </div>
+
+    <!-- 文字部分 -->
+    Ref<span class="logo-grey">eree</span><span class="logo-green">Log</span>
+</div>
+            <div class="nav-right">
+                <button class="lang-switch" onclick="toggleLanguage()"><span lang="zh">EN / 中</span><span lang="en">中 / EN</span></button>
+            </div>
+        </nav>
+
+        <!-- Hero -->
+        <section class="hero">
+            <h1><span lang="zh">赛场时刻，精准掌控。</span><span lang="en">Precision on the Pitch.</span></h1>
+            <p><span lang="zh">源于实战的专业足球裁判助手。</span><span lang="en">A professional tool built for referees.</span></p>
+            <div class="btn-group">
+                <a href="https://www.pgyer.com/你的链接" class="btn btn-primary" target="_blank">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    <span>Download APK</span>
+                </a>
+                <a href="https://github.com/你的用户名/reflog" class="btn btn-secondary" target="_blank">
+                    <span>GitHub</span>
+                </a>
+            </div>
+        </section>
+
+        <section class="interactive-section">
+            
+            <!-- 左侧：手机屏幕 (舞台) -->
+            <div class="phone-wrapper">
+                <div class="phone-glow"></div>
+                <div class="phone-frame">
+                    <div class="screen-container">
+                        <img src="assets/1.jpg" class="screen-img active" id="img-1" alt="Timer">
+                        <img src="assets/2.jpg" class="screen-img" id="img-2" alt="Log">
+                        <img src="assets/3.jpg" class="screen-img" id="img-3" alt="Wheel">
+                        <img src="assets/4.jpg" class="screen-img" id="img-4" alt="Summary">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：功能选项 (遥控器) -->
+            <div class="feature-selector">
+                <div class="section-label"><span lang="zh">核心功能</span><span lang="en">Core Features</span></div>
+
+                <!-- 卡片 1 (默认激活) -->
+                <!-- onclick 触发切换函数 -->
+                <div class="feature-card active" onclick="switchFeature(1, this)">
+                    <div class="card-header">
+                        <div class="f-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div>
+                        <h3><span lang="zh">专业计时系统</span><span lang="en">Dual Timing Logic</span></h3>
+                    </div>
+                    <p><span lang="zh">主计时与补时双轨运行。暂停时补时自动接管，可视化颜色提醒。</span><span lang="en">Runs match & stoppage time simultaneously with color alerts.</span></p>
+                </div>
+
+                <!-- 卡片 2 -->
+                <div class="feature-card" onclick="switchFeature(2, this)">
+                    <div class="card-header">
+                        <div class="f-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></div>
+                        <h3><span lang="zh">高效事件记录</span><span lang="en">Quick Event Log</span></h3>
+                    </div>
+                    <p><span lang="zh">红黄牌、进球、换人一键触发。自动匹配主客队颜色。</span><span lang="en">One-tap logging. Team colors auto-sync to reduce distractions.</span></p>
+                </div>
+
+                <!-- 卡片 3 -->
+                <div class="feature-card" onclick="switchFeature(3, this)">
+                    <div class="card-header">
+                        <div class="f-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg></div>
+                        <h3><span lang="zh">磁吸滚轮交互</span><span lang="en">Haptic Wheel</span></h3>
+                    </div>
+                    <p><span lang="zh">惯性物理引擎 + 震动反馈，让选择号码变得无比精准顺手。</span><span lang="en">Inertia physics & haptic feedback for precise control.</span></p>
+                </div>
+
+                <!-- 卡片 4 -->
+                <div class="feature-card" onclick="switchFeature(4, this)">
+                    <div class="card-header">
+                        <div class="f-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg></div>
+                        <h3><span lang="zh">智能赛后总结</span><span lang="en">Match Summary</span></h3>
+                    </div>
+                    <p><span lang="zh">全场结束自动生成报告，包含时间轴与事件人。</span><span lang="en">Auto-generated reports with detailed timelines.</span></p>
+                </div>
+
+            </div>
+        </section>
+
+        <footer>
+            <p><strong><span lang="zh">源于赛场，专为裁判。</span><span lang="en">Built by Referees, For Referees.</span></strong></p>
+            <p style="opacity: 0.3; margin-top: 10px;">&copy; 2026 RefereeLog Project</p>
+        </footer>
+    </div>
+
+    <script>
+        // 语言切换
+        function toggleLanguage() {
+            const body = document.body; body.classList.toggle('en-mode');
+            const isEn = body.classList.contains('en-mode'); localStorage.setItem('reflog_lang', isEn ? 'en' : 'zh');
+        }
+        document.addEventListener('DOMContentLoaded', () => {
+            if (localStorage.getItem('reflog_lang') === 'en') document.body.classList.add('en-mode');
+        });
+
+        function switchFeature(id, cardElement) {
+            document.querySelectorAll('.feature-card').forEach(el => el.classList.remove('active'));
+            // 给当前点击的卡片添加 active
+            cardElement.classList.add('active');
+
+            // 2. 图片切换 (带淡入淡出)
+            // 找到所有图片，移除 active
+            document.querySelectorAll('.screen-img').forEach(img => img.classList.remove('active'));
+            // 找到对应的图片 ID，添加 active
+            const targetImg = document.getElementById('img-' + id);
+            if (targetImg) {
+                targetImg.classList.add('active');
+            }
+        }
+    </script>
+</body>
+</html>
